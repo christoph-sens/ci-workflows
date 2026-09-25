@@ -1,0 +1,49 @@
+name: Release
+
+# Every change to a reusable workflow on main becomes a patch release, so Dependabot proposes it in
+# the calling repos. Minor/major releases (new inputs / breaking changes) are started manually.
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/gradle-ci.yml
+      - .github/workflows/dependabot-auto-merge.yml
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version part to increase
+        type: choice
+        options: [patch, minor, major]
+        default: minor
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Create release
+        run: |
+          latest=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // ""')
+          if [[ -z "$latest" ]]; then
+            next=v1.0.0
+          else
+            IFS=. read -r major minor patch <<< "${latest#v}"
+            case "$BUMP" in
+              major) next="v$((major + 1)).0.0" ;;
+              minor) next="v$major.$((minor + 1)).0" ;;
+              *)     next="v$major.$minor.$((patch + 1))" ;;
+            esac
+          fi
+          gh release create "$next" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --generate-notes
+        env:
+          BUMP: ${{ inputs.bump || 'patch' }}
+          GH_TOKEN: ${{ github.token }}
