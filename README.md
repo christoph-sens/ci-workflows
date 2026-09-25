@@ -6,7 +6,7 @@ copies that drift apart.
 
 | Workflow | Purpose |
 | --- | --- |
-| [`gradle-ci.yml`](.github/workflows/gradle-ci.yml) | Build + tests, optional integration tests, optional Docker image with Trivy scan, CodeQL (Kotlin/Java and workflows), Gradle dependency submission |
+| [`gradle-ci.yml`](.github/workflows/gradle-ci.yml) | Build + tests, optional integration tests, optional Docker image with Trivy scan, CodeQL (Kotlin/Java and workflows), Gradle dependency submission, dependency review on pull requests |
 | [`dependabot-auto-merge.yml`](.github/workflows/dependabot-auto-merge.yml) | Auto-merge (squash) for Dependabot minor/patch PRs once CI is green |
 
 ## Usage
@@ -70,8 +70,20 @@ jobs:
 
 ### Status checks
 
-The jobs report as `<caller job> / <job>`, e.g. `ci / build`, `ci / codeql` and
-`ci / codeql-actions`. Use these names as required status checks in branch rulesets.
+The jobs report as `<caller job> / <job>`, e.g. `ci / build`, `ci / codeql`,
+`ci / codeql-actions` and `ci / dependency-review`. Use these names as required status checks in
+branch rulesets.
+
+### Dependency review
+
+On pull requests the Gradle dependency graph is submitted for the PR head, then
+[dependency-review-action](https://github.com/actions/dependency-review-action) fails the PR if it
+adds or updates a dependency with a known **high/critical** vulnerability or a license outside the
+allow-list: permissive licenses plus weak copyleft (LGPL, EPL, MPL, CDDL, GPL-2.0 with Classpath
+exception). Strong copyleft (GPL, AGPL) and source-available licenses (SSPL, BUSL) are blocked.
+Packages whose license data on GitHub is missing or unusable are listed in
+`allow-dependencies-licenses` and skip the license check. PRs from forks skip both jobs (no write
+token for the submission).
 
 ## Versioning
 

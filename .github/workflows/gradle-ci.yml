@@ -133,10 +133,13 @@ jobs:
           category: /language:actions
 
   # Sends the resolved Gradle dependency tree to GitHub's dependency graph so Dependabot alerts
-  # and security updates cover Maven dependencies (GitHub cannot resolve them statically).
+  # and security updates cover Maven dependencies (GitHub cannot resolve them statically). On pull
+  # requests it provides the snapshot for dependency-review; fork PRs are skipped (no write token).
   # Keep the job id: together with the caller's workflow name it forms the snapshot correlator.
   dependency-submission:
-    if: github.event_name == 'push'
+    if: >-
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -148,3 +151,35 @@ jobs:
           distribution: temurin
           java-version: ${{ inputs.java-version }}
       - uses: gradle/actions/dependency-submission@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+
+  # Blocks pull requests that add or update dependencies with known high/critical vulnerabilities or
+  # licenses outside the allow-list (permissive and weak copyleft; no GPL/AGPL/SSPL/BUSL). Packages
+  # with missing or unusable license data in GitHub's database are excluded from the license check.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    needs: dependency-submission
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          retry-on-snapshot-warnings: true
+          retry-on-snapshot-warnings-timeout: 120
+          allow-licenses: >-
+            0BSD, Apache-1.1, Apache-2.0, BSD-2-Clause, BSD-3-Clause, BSL-1.0, CC0-1.0,
+            CDDL-1.0, CDDL-1.1, EPL-1.0, EPL-2.0, ISC, LGPL-2.1, LGPL-2.1-only, LGPL-2.1-or-later,
+            LGPL-3.0-only, LGPL-3.0-or-later, MIT, MIT-0, MPL-2.0, Unicode-3.0, Unicode-DFS-2016,
+            Zlib, GPL-2.0-only WITH Classpath-exception-2.0
+          allow-dependencies-licenses: >-
+            pkg:maven/org.bouncycastle/bc-jdk18on-bom, pkg:maven/org.bouncycastle/bcpg-jdk18on,
+            pkg:maven/org.bouncycastle/bcpkix-jdk18on, pkg:maven/org.bouncycastle/bcprov-jdk18on,
+            pkg:maven/org.bouncycastle/bcutil-jdk18on, pkg:maven/org.junit/junit-bom,
+            pkg:maven/com.tngtech.archunit/archunit, pkg:maven/org.eclipse.jetty/jetty-bom,
+            pkg:maven/org.eclipse.jetty.ee11/jetty-ee11-bom, pkg:maven/ch.qos.logback/logback-parent,
+            pkg:maven/org.glassfish.jaxb/jaxb-core, pkg:maven/org.glassfish.jaxb/jaxb-runtime,
+            pkg:maven/org.glassfish.jaxb/txw2, pkg:maven/jakarta.xml.bind/jakarta.xml.bind-api,
+            pkg:maven/org.eclipse.angus/angus-activation, pkg:maven/org.eclipse.ee4j/project,
+            pkg:maven/org.springframework.session/spring-session-bom, pkg:maven/com.github.librepdf/openpdf
