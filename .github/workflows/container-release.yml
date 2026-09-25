@@ -130,9 +130,13 @@ jobs:
           subject-digest: ${{ steps.push.outputs.digest }}
           sbom-path: sbom.cdx.json
           push-to-registry: true
+      # The attestation is signed by this reusable workflow, so the signer is ci-workflows, while the
+      # source repository and ref are the caller's release tag.
       - name: Verify provenance
         if: github.ref_type == 'tag'
-        run: gh attestation verify "oci://$PUSHED" --repo "$GITHUB_REPOSITORY"
+        run: >-
+          gh attestation verify "oci://$PUSHED" --repo "$GITHUB_REPOSITORY"
+          --signer-repo christoph-sens/ci-workflows --source-ref "$GITHUB_REF"
         env:
           PUSHED: ${{ steps.push.outputs.image }}
           GH_TOKEN: ${{ github.token }}

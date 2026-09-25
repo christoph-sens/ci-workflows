@@ -131,8 +131,12 @@ Trivy finds no HIGH/CRITICAL vulnerability that has a fix. Deploy it by digest (
 release notes) and verify it with:
 
 ```bash
-gh attestation verify oci://ghcr.io/<owner>/<repository>@sha256:<digest> --repo <owner>/<repository>
+gh attestation verify oci://ghcr.io/<owner>/<repository>@sha256:<digest> --repo <owner>/<repository> \
+  --signer-repo christoph-sens/ci-workflows
 ```
+
+`--signer-repo` is needed because the attestation is signed by this repository's reusable
+workflow, not by the app repository itself.
 
 ## Versioning
 
