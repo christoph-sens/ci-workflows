@@ -8,6 +8,7 @@ copies that drift apart.
 | --- | --- |
 | [`gradle-ci.yml`](.github/workflows/gradle-ci.yml) | Build + tests, optional integration tests, optional Docker image with Trivy scan, CodeQL (Kotlin/Java and workflows), Gradle dependency submission, dependency review on pull requests |
 | [`dependabot-auto-merge.yml`](.github/workflows/dependabot-auto-merge.yml) | Auto-merge (squash) for Dependabot minor/patch PRs once CI is green |
+| [`container-release.yml`](.github/workflows/container-release.yml) | Release of a Spring Boot app as container image: on tag `vX.Y.Z` build + test, Trivy gate, push to GHCR, provenance + SBOM attestations, GitHub release |
 
 ## Usage
 
@@ -59,6 +60,37 @@ jobs:
     uses: christoph-sens/ci-workflows/.github/workflows/dependabot-auto-merge.yml@<commit-sha> # v1.0.0
 ```
 
+`.github/workflows/release.yml` of an app with a Dockerfile `prebuilt` target:
+
+```yaml
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  # Manual run = dry run: builds, tests and scans the image, never pushes.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    uses: christoph-sens/ci-workflows/.github/workflows/container-release.yml@<commit-sha> # v1.1.0
+    permissions:
+      contents: write          # GitHub release
+      packages: write          # push to GHCR
+      id-token: write          # Sigstore signing of the attestations
+      attestations: write
+      artifact-metadata: write
+    with:
+      docker-jar-dir: bootstrap/build/libs
+```
+
 ### Inputs of `gradle-ci.yml`
 
 | Input | Default | Description |
@@ -85,15 +117,33 @@ Packages whose license data on GitHub is missing or unusable are listed in
 `allow-dependencies-licenses` and skip the license check. PRs from forks skip both jobs (no write
 token for the submission).
 
+### Inputs of `container-release.yml`
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `java-version` | `25` | Temurin JDK version |
+| `gradle-tasks` | `build` | Gradle tasks that build and test the app |
+| `docker-jar-dir` | (required) | Directory of the boot jar, build context `app` of the `prebuilt` target |
+| `image-name` | `ghcr.io/<owner>/<repository>` | Image name without tag |
+
+The image is tagged with the version from the Git tag (`v1.2.3` → `1.2.3`). It is only pushed if
+Trivy finds no HIGH/CRITICAL vulnerability that has a fix. Deploy it by digest (see the GitHub
+release notes) and verify it with:
+
+```bash
+gh attestation verify oci://ghcr.io/<owner>/<repository>@sha256:<digest> --repo <owner>/<repository>
+```
+
 ## Versioning
 
 Reference the workflows by full commit SHA with the version as a comment, like any other action;
 Dependabot (`github-actions` ecosystem) keeps both up to date.
 
-- Every change to a reusable workflow merged to `main` is released automatically as a **patch**
-  version by [`release.yml`](.github/workflows/release.yml).
-- Changes that add inputs (**minor**) or break callers (**major**) are released by running the
-  Release workflow manually with the matching `bump`.
+- Every change to a reusable workflow merged to `main` is released automatically by
+  [`release.yml`](.github/workflows/release.yml): as a **patch** by default, as **minor** or
+  **major** when the pull request has the label `release:minor` (new workflow or input) or
+  `release:major` (breaking change for callers).
+- The Release workflow can also be run manually with the desired `bump`.
 - Releases are immutable: a published version can never be changed.
 
 ## License

@@ -1,0 +1,157 @@
+name: Container release
+
+# Reusable release for Spring Boot apps: on a tag vX.Y.Z it builds and tests the app, packages the jar
+# with the Dockerfile's `prebuilt` target, blocks on HIGH/CRITICAL vulnerabilities that have a fix,
+# pushes the image to GHCR, attests build provenance and a CycloneDX SBOM, verifies the attestation
+# and creates a GitHub release naming the image digest. Any other trigger is a dry run that never
+# pushes.
+on:
+  workflow_call:
+    inputs:
+      java-version:
+        description: Temurin JDK version.
+        type: string
+        default: "25"
+      gradle-tasks:
+        description: Gradle tasks that build and test the app, space-separated.
+        type: string
+        default: build
+      docker-jar-dir:
+        description: Directory of the boot jar produced by gradle-tasks (build context `app` of the `prebuilt` target).
+        type: string
+        required: true
+      image-name:
+        description: Image name without tag. Defaults to ghcr.io/<owner>/<repository>.
+        type: string
+        default: ""
+    outputs:
+      image:
+        description: Pushed image reference with digest (empty on dry runs).
+        value: ${{ jobs.image.outputs.image }}
+
+permissions: {}
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    outputs:
+      image: ${{ steps.push.outputs.image }}
+    env:
+      IMAGE: ${{ inputs.image-name || format('ghcr.io/{0}', github.repository) }}
+    steps:
+      - id: version
+        name: Determine version
+        run: |
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+              echo "::error::Tag $GITHUB_REF_NAME is not a SemVer tag (expected vX.Y.Z)"
+              exit 1
+            fi
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          else
+            echo "version=0.0.0-dryrun" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+        with:
+          cache-read-only: true
+      - name: Build and test
+        run: |
+          read -ra tasks <<< "$GRADLE_TASKS"
+          ./gradlew "${tasks[@]}"
+        env:
+          GRADLE_TASKS: ${{ inputs.gradle-tasks }}
+      - name: Build image
+        run: >-
+          docker build --target prebuilt --build-context "app=$JAR_DIR"
+          --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY"
+          --label "org.opencontainers.image.revision=$GITHUB_SHA"
+          --label "org.opencontainers.image.version=$VERSION"
+          -t "$IMAGE:$VERSION" .
+        env:
+          JAR_DIR: ${{ inputs.docker-jar-dir }}
+          VERSION: ${{ steps.version.outputs.version }}
+      # Release gate: no image with a known, fixable HIGH/CRITICAL vulnerability gets published.
+      - name: Scan image
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Generate SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
+          format: cyclonedx
+          output: sbom.cdx.json
+          skip-setup-trivy: true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom
+          path: sbom.cdx.json
+          retention-days: 7
+      - id: push
+        name: Push image
+        if: github.ref_type == 'tag'
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker push "$IMAGE:$VERSION"
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "$IMAGE:$VERSION")
+          digest=${digest#*@}
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "image=$IMAGE@$digest" >> "$GITHUB_OUTPUT"
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+      - name: Attest build provenance
+        if: github.ref_type == 'tag'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+      - name: Attest SBOM
+        if: github.ref_type == 'tag'
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          sbom-path: sbom.cdx.json
+          push-to-registry: true
+      - name: Verify provenance
+        if: github.ref_type == 'tag'
+        run: gh attestation verify "oci://$PUSHED" --repo "$GITHUB_REPOSITORY"
+        env:
+          PUSHED: ${{ steps.push.outputs.image }}
+          GH_TOKEN: ${{ github.token }}
+
+  github-release:
+    needs: image
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: sbom
+      - name: Create GitHub release
+        run: |
+          gh release create "$GITHUB_REF_NAME" sbom.cdx.json --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes \
+            --notes "Container image: \`$PUSHED\`"
+        env:
+          PUSHED: ${{ needs.image.outputs.image }}
+          GH_TOKEN: ${{ github.token }}
