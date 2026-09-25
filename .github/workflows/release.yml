@@ -1,13 +1,15 @@
 name: Release
 
-# Every change to a reusable workflow on main becomes a patch release, so Dependabot proposes it in
-# the calling repos. Minor/major releases (new inputs / breaking changes) are started manually.
+# Every change to a reusable workflow on main becomes a release, so Dependabot proposes it in the
+# calling repos: patch by default, minor/major when the merged pull request carries the label
+# `release:minor` / `release:major` (new features / breaking changes). A manual run picks the bump.
 on:
   push:
     branches: [main]
     paths:
       - .github/workflows/gradle-ci.yml
       - .github/workflows/dependabot-auto-merge.yml
+      - .github/workflows/container-release.yml
   workflow_dispatch:
     inputs:
       bump:
@@ -29,9 +31,17 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+      pull-requests: read # labels of the merged pull request
     steps:
       - name: Create release
         run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            labels=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq '[.[].labels[].name] | join(" ")')
+            case " $labels " in
+              *" release:major "*) BUMP=major ;;
+              *" release:minor "*) BUMP=minor ;;
+            esac
+          fi
           latest=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --limit 1 --json tagName --jq '.[0].tagName // ""')
           if [[ -z "$latest" ]]; then
             next=v1.0.0
