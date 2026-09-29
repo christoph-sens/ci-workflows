@@ -5,7 +5,8 @@ name: Security alert issues
 # it when alerts come back and closes it once no alert is open any more (fixed or dismissed).
 # Dependabot opens no pull request for dependencies managed by a BOM (e.g. Jackson via Spring Boot)
 # or known only from the Gradle dependency graph snapshot, so these alerts need a tracked issue.
-# Call it on a schedule with issues: write and security-events: read.
+# Call it on a schedule with issues: write. GITHUB_TOKEN cannot read Dependabot alerts, so the
+# caller passes a token that can (fine-grained PAT with "Dependabot alerts: Read-only").
 on:
   workflow_call:
     inputs:
@@ -13,6 +14,10 @@ on:
         description: Only log what would change, do not touch issues
         type: boolean
         default: false
+    secrets:
+      alerts-token:
+        description: Token with read access to the repository's Dependabot alerts
+        required: true
 
 permissions: {}
 
@@ -22,7 +27,6 @@ jobs:
     timeout-minutes: 10
     permissions:
       issues: write
-      security-events: read # Dependabot alerts
     steps:
       - name: Sync issues with Dependabot alerts
         run: |
@@ -34,9 +38,14 @@ jobs:
             if [[ "$DRY_RUN" == "true" ]]; then echo "[dry-run] $*"; else "$@"; fi
           }
 
+          if ! GH_TOKEN="$ALERTS_TOKEN" gh api --paginate \
+              "repos/$GITHUB_REPOSITORY/dependabot/alerts?state=open&per_page=100" > "$work/alerts.json"; then
+            echo "::error::Cannot read the Dependabot alerts. Are they enabled, and can the alerts-token read them?"
+            exit 1
+          fi
+
           # Open alerts grouped by package, highest severity first, rendered as issue title + body.
-          gh api --paginate "repos/$GITHUB_REPOSITORY/dependabot/alerts?state=open&per_page=100" \
-            | jq -s '
+          jq -s '
                 def rank: {"critical": 4, "high": 3, "medium": 2, "low": 1}[.] // 0;
                 def cell: tostring | gsub("[|\n\r]"; " ");
                 add // []
@@ -69,7 +78,7 @@ jobs:
                   )
                 | sort_by(-.rank, .key)
                 | map(del(.rank))
-              ' > "$work/packages.json"
+              ' "$work/alerts.json" > "$work/packages.json"
 
           gh issue list --repo "$GITHUB_REPOSITORY" --label security --state all --limit 1000 \
               --json number,state,title,body \
@@ -117,5 +126,6 @@ jobs:
             '($packages[0] | map(.key)) as $keys | .[] | select(.state == "OPEN" and (.key | IN($keys[]) | not)) | .number' \
             "$work/issues.json")
         env:
+          ALERTS_TOKEN: ${{ secrets.alerts-token }}
           DRY_RUN: ${{ inputs.dry-run }}
           GH_TOKEN: ${{ github.token }}
