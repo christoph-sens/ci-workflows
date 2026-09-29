@@ -10,6 +10,7 @@ on:
       - .github/workflows/gradle-ci.yml
       - .github/workflows/dependabot-auto-merge.yml
       - .github/workflows/container-release.yml
+      - .github/workflows/security-alert-issues.yml
   workflow_dispatch:
     inputs:
       bump:

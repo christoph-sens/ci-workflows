@@ -8,6 +8,7 @@ copies that drift apart.
 | --- | --- |
 | [`gradle-ci.yml`](.github/workflows/gradle-ci.yml) | Build + tests, optional integration tests, optional Docker image with Trivy scan, CodeQL (Kotlin/Java and workflows), Gradle dependency submission, dependency review on pull requests |
 | [`dependabot-auto-merge.yml`](.github/workflows/dependabot-auto-merge.yml) | Auto-merge (squash) for Dependabot minor/patch PRs once CI is green |
+| [`security-alert-issues.yml`](.github/workflows/security-alert-issues.yml) | One issue per vulnerable package, kept in sync with the open Dependabot alerts |
 | [`container-release.yml`](.github/workflows/container-release.yml) | Release of a Spring Boot app as container image: on tag `vX.Y.Z` build + test, Trivy gate, push to GHCR, provenance + SBOM attestations, GitHub release |
 
 ## Usage
@@ -91,6 +92,31 @@ jobs:
       docker-jar-dir: bootstrap/build/libs
 ```
 
+`.github/workflows/security-alert-issues.yml`:
+
+```yaml
+name: Security alert issues
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    uses: christoph-sens/ci-workflows/.github/workflows/security-alert-issues.yml@<commit-sha> # v1.2.0
+    permissions:
+      issues: write
+      security-events: read # Dependabot alerts
+```
+
 ### Inputs of `gradle-ci.yml`
 
 | Input | Default | Description |
@@ -116,6 +142,17 @@ exception). Strong copyleft (GPL, AGPL) and source-available licenses (SSPL, BUS
 Packages whose license data on GitHub is missing or unusable are listed in
 `allow-dependencies-licenses` and skip the license check. PRs from forks skip both jobs (no write
 token for the submission).
+
+### Security alert issues
+
+Dependabot opens security pull requests only for dependencies it can update in a manifest. Alerts
+for dependencies managed by a BOM (e.g. Jackson via the Spring Boot BOM) or known only from the
+Gradle dependency graph snapshot get no pull request and are easy to miss.
+`security-alert-issues.yml` therefore keeps one issue labelled `security` per vulnerable package:
+created for new alerts, updated when they change, reopened when alerts come back and closed once no
+alert is open any more (fixed or dismissed). The issue body lists every alert with advisory,
+severity, vulnerable range and fixed version. Input `dry-run` (default `false`) only logs the
+changes. Dependabot alerts must be enabled in the repository.
 
 ### Inputs of `container-release.yml`
 

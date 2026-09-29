@@ -1,0 +1,20 @@
+name: Security alert issues
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    uses: ./.github/workflows/security-alert-issues.yml
+    permissions:
+      issues: write
+      security-events: read # Dependabot alerts
