@@ -1,0 +1,121 @@
+name: Security alert issues
+
+# Reusable: keeps one issue per vulnerable package in sync with the open Dependabot alerts of the
+# calling repository. Creates the issue for a new package, updates it when alerts change, reopens
+# it when alerts come back and closes it once no alert is open any more (fixed or dismissed).
+# Dependabot opens no pull request for dependencies managed by a BOM (e.g. Jackson via Spring Boot)
+# or known only from the Gradle dependency graph snapshot, so these alerts need a tracked issue.
+# Call it on a schedule with issues: write and security-events: read.
+on:
+  workflow_call:
+    inputs:
+      dry-run:
+        description: Only log what would change, do not touch issues
+        type: boolean
+        default: false
+
+permissions: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+      security-events: read # Dependabot alerts
+    steps:
+      - name: Sync issues with Dependabot alerts
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/security-alert-issues"
+          mkdir -p "$work"
+
+          act() {
+            if [[ "$DRY_RUN" == "true" ]]; then echo "[dry-run] $*"; else "$@"; fi
+          }
+
+          # Open alerts grouped by package, highest severity first, rendered as issue title + body.
+          gh api --paginate "repos/$GITHUB_REPOSITORY/dependabot/alerts?state=open&per_page=100" \
+            | jq -s '
+                def rank: {"critical": 4, "high": 3, "medium": 2, "low": 1}[.] // 0;
+                def cell: tostring | gsub("[|\n\r]"; " ");
+                add // []
+                | group_by(.dependency.package.ecosystem + ":" + .dependency.package.name)
+                | map(
+                    (.[0].dependency.package) as $pkg
+                    | sort_by(-(.security_advisory.severity | rank), .number) as $alerts
+                    | ($alerts[0].security_advisory.severity) as $severity
+                    | {
+                        rank: ($severity | rank),
+                        key: "\($pkg.ecosystem):\($pkg.name)",
+                        title: "Security: \($pkg.name) (\($severity))",
+                        body: ([
+                          "<!-- security-alert-issue: \($pkg.ecosystem):\($pkg.name) -->",
+                          "Dependabot reports **\($alerts | length) open alert(s)** for `\($pkg.name)` (\($pkg.ecosystem)), highest severity **\($severity)**.",
+                          "",
+                          "| Alert | Advisory | Severity | Vulnerable | Fixed in | Manifest |",
+                          "| --- | --- | --- | --- | --- | --- |",
+                          ($alerts[] | "| [#\(.number)](\(.html_url)) | [\(.security_advisory.ghsa_id)](https://github.com/advisories/\(.security_advisory.ghsa_id)) \(.security_advisory.summary | cell) | \(.security_advisory.severity) | `\(.security_vulnerability.vulnerable_version_range | cell)` | `\(.security_vulnerability.first_patched_version.identifier // "no fix yet")` | `\(.dependency.manifest_path | cell)` (\(.dependency.relationship // "unknown")) |"),
+                          "",
+                          "### How to fix",
+                          "",
+                          "1. Upgrade `\($pkg.name)` to at least the \"Fixed in\" version: directly, or by upgrading the BOM / parent that manages it (e.g. Spring Boot).",
+                          "2. If that BOM has no release with the fix yet, pin the fixed version temporarily and note when the pin can be removed.",
+                          "3. If the vulnerable code is not reachable, dismiss the alert with a reason instead.",
+                          "",
+                          "_Maintained by the security alert issues workflow: updated when the alerts change, closed automatically once no alert for this package is open._"
+                        ] | join("\n"))
+                      }
+                  )
+                | sort_by(-.rank, .key)
+                | map(del(.rank))
+              ' > "$work/packages.json"
+
+          gh issue list --repo "$GITHUB_REPOSITORY" --label security --state all --limit 1000 \
+              --json number,state,title,body \
+            | jq '[.[] | (.body | capture("<!-- security-alert-issue: (?<key>[^ ]+) -->")? | .key) as $key
+                   | select($key) | . + {key: $key}]' > "$work/issues.json"
+
+          if [[ "$DRY_RUN" != "true" ]] \
+              && ! gh label list --repo "$GITHUB_REPOSITORY" --limit 1000 --json name --jq '.[].name' | grep -qx security; then
+            gh label create security --repo "$GITHUB_REPOSITORY" --color B60205 \
+              --description "Vulnerable dependency reported by Dependabot"
+          fi
+
+          echo "Open alerts in $(jq length "$work/packages.json") package(s)."
+          while IFS= read -r pkg; do
+            key=$(jq -r .key <<< "$pkg")
+            title=$(jq -r .title <<< "$pkg")
+            jq -r .body <<< "$pkg" > "$work/body.md"
+            # Prefer the open issue, otherwise the most recent closed one.
+            issue=$(jq -c --arg key "$key" \
+              '[.[] | select(.key == $key)] | sort_by(.state != "OPEN", -.number) | first // empty' "$work/issues.json")
+
+            if [[ -z "$issue" ]]; then
+              echo "Create issue for $key"
+              act gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$work/body.md" --label security
+              continue
+            fi
+
+            number=$(jq -r .number <<< "$issue")
+            if [[ $(jq -r .state <<< "$issue") != "OPEN" ]]; then
+              echo "Reopen #$number for $key"
+              act gh issue reopen "$number" --repo "$GITHUB_REPOSITORY" --comment "Dependabot reports open alerts for this package again."
+            fi
+            if [[ $(jq -r .title <<< "$issue") != "$title" || $(jq -r .body <<< "$issue") != "$(cat "$work/body.md")" ]]; then
+              echo "Update #$number for $key"
+              act gh issue edit "$number" --repo "$GITHUB_REPOSITORY" --title "$title" --body-file "$work/body.md"
+            fi
+          done < <(jq -c '.[]' "$work/packages.json")
+
+          # Open issues whose package has no open alert any more.
+          while IFS= read -r number; do
+            echo "Close #$number"
+            act gh issue close "$number" --repo "$GITHUB_REPOSITORY" --reason completed \
+              --comment "No open Dependabot alert for this package any more (fixed or dismissed)."
+          done < <(jq -r --slurpfile packages "$work/packages.json" \
+            '($packages[0] | map(.key)) as $keys | .[] | select(.state == "OPEN" and (.key | IN($keys[]) | not)) | .number' \
+            "$work/issues.json")
+        env:
+          DRY_RUN: ${{ inputs.dry-run }}
+          GH_TOKEN: ${{ github.token }}
