@@ -17,4 +17,5 @@ jobs:
     uses: ./.github/workflows/security-alert-issues.yml
     permissions:
       issues: write
-      security-events: read # Dependabot alerts
+    secrets:
+      alerts-token: ${{ secrets.DEPENDABOT_ALERTS_TOKEN }}

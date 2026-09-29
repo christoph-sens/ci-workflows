@@ -111,10 +111,11 @@ concurrency:
 
 jobs:
   sync:
-    uses: christoph-sens/ci-workflows/.github/workflows/security-alert-issues.yml@<commit-sha> # v1.2.0
+    uses: christoph-sens/ci-workflows/.github/workflows/security-alert-issues.yml@<commit-sha> # v1.2.1
     permissions:
       issues: write
-      security-events: read # Dependabot alerts
+    secrets:
+      alerts-token: ${{ secrets.DEPENDABOT_ALERTS_TOKEN }}
 ```
 
 ### Inputs of `gradle-ci.yml`
@@ -153,6 +154,11 @@ created for new alerts, updated when they change, reopened when alerts come back
 alert is open any more (fixed or dismissed). The issue body lists every alert with advisory,
 severity, vulnerable range and fixed version. Input `dry-run` (default `false`) only logs the
 changes. Dependabot alerts must be enabled in the repository.
+
+`GITHUB_TOKEN` cannot read Dependabot alerts, so the caller passes `alerts-token`: a fine-grained
+personal access token with only the repository permission **Dependabot alerts: Read-only** for the
+calling repositories, stored as repository secret `DEPENDABOT_ALERTS_TOKEN`. It is used for nothing
+but reading the alerts; issues are written with `GITHUB_TOKEN`.
 
 ### Inputs of `container-release.yml`
 
