@@ -1,12 +1,13 @@
 # ci-workflows
 
-Reusable GitHub Actions workflows shared by the Kotlin/Gradle repositories of
-[christoph-sens](https://github.com/christoph-sens): one place to maintain CI instead of five
-copies that drift apart.
+Reusable GitHub Actions workflows shared by the repositories of
+[christoph-sens](https://github.com/christoph-sens) (Kotlin/Gradle and Node): one place to maintain
+CI instead of copies that drift apart.
 
 | Workflow | Purpose |
 | --- | --- |
 | [`gradle-ci.yml`](.github/workflows/gradle-ci.yml) | Build + tests, optional integration tests, optional Docker image with Trivy scan, CodeQL (Kotlin/Java and workflows), Gradle dependency submission, dependency review on pull requests |
+| [`node-ci.yml`](.github/workflows/node-ci.yml) | `npm ci` + npm scripts (default `check build`), CodeQL (JavaScript/TypeScript and workflows), dependency review on pull requests |
 | [`dependabot-auto-merge.yml`](.github/workflows/dependabot-auto-merge.yml) | Auto-merge (squash) for Dependabot minor/patch PRs once CI is green |
 | [`security-alert-issues.yml`](.github/workflows/security-alert-issues.yml) | One issue per vulnerable package, kept in sync with the open Dependabot alerts |
 | [`container-release.yml`](.github/workflows/container-release.yml) | Release of a Spring Boot app as container image: on tag `vX.Y.Z` build + test, Trivy gate, push to GHCR, provenance + SBOM attestations, GitHub release |
@@ -40,6 +41,18 @@ jobs:
       security-events: write # CodeQL and Trivy results
     with:
       integration-tests: true
+```
+
+For a Node repository use `node-ci.yml` instead; it needs only `contents: read` and
+`security-events: write`:
+
+```yaml
+jobs:
+  ci:
+    uses: christoph-sens/ci-workflows/.github/workflows/node-ci.yml@<commit-sha> # v1.3.0
+    permissions:
+      contents: read
+      security-events: write # CodeQL results
 ```
 
 Keep the workflow name `CI`: together with the job id `dependency-submission` it identifies the
@@ -126,6 +139,17 @@ jobs:
 | `gradle-tasks` | `build` | Gradle tasks of the main build step, space-separated |
 | `integration-tests` | `false` | Run `./gradlew integrationTest` and compile that source set for CodeQL |
 | `docker-jar-dir` | `""` | Directory of the boot jar; when set, the Dockerfile's `prebuilt` target is built with it as build context `app` and scanned with Trivy |
+
+### Inputs of `node-ci.yml`
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `node-version` | `24` | Node.js version for `actions/setup-node` |
+| `npm-scripts` | `check build` | npm scripts run in order after `npm ci`, space-separated |
+
+GitHub reads `package-lock.json` natively, so dependency review works without a dependency
+submission job. The license allow-list additionally permits OFL-1.1 (web fonts), BlueOak-1.0.0 and
+Python-2.0.
 
 ### Status checks
 
