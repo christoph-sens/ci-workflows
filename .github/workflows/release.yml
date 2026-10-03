@@ -8,6 +8,7 @@ on:
     branches: [main]
     paths:
       - .github/workflows/gradle-ci.yml
+      - .github/workflows/node-ci.yml
       - .github/workflows/dependabot-auto-merge.yml
       - .github/workflows/container-release.yml
       - .github/workflows/security-alert-issues.yml
