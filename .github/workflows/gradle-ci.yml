@@ -182,4 +182,5 @@ jobs:
             pkg:maven/org.glassfish.jaxb/jaxb-core, pkg:maven/org.glassfish.jaxb/jaxb-runtime,
             pkg:maven/org.glassfish.jaxb/txw2, pkg:maven/jakarta.xml.bind/jakarta.xml.bind-api,
             pkg:maven/org.eclipse.angus/angus-activation, pkg:maven/org.eclipse.ee4j/project,
-            pkg:maven/org.springframework.session/spring-session-bom, pkg:maven/com.github.librepdf/openpdf
+            pkg:maven/org.springframework.session/spring-session-bom, pkg:maven/com.github.librepdf/openpdf,
+            pkg:maven/aopalliance/aopalliance, pkg:maven/org.apache.maven/maven-core
