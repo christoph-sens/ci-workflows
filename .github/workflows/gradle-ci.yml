@@ -39,7 +39,7 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ inputs.java-version }}
-      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       - name: Build
         run: |
           read -ra tasks <<< "$GRADLE_TASKS"
@@ -99,7 +99,7 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ inputs.java-version }}
-      - uses: gradle/actions/setup-gradle@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
       - uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           languages: java-kotlin
@@ -150,7 +150,7 @@ jobs:
         with:
           distribution: temurin
           java-version: ${{ inputs.java-version }}
-      - uses: gradle/actions/dependency-submission@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      - uses: gradle/actions/dependency-submission@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
 
   # Blocks pull requests that add or update dependencies with known high/critical vulnerabilities or
   # licenses outside the allow-list (permissive and weak copyleft; no GPL/AGPL/SSPL/BUSL). Packages
