@@ -188,4 +188,5 @@ jobs:
             pkg:maven/net.jqwik/jqwik-api, pkg:maven/net.jqwik/jqwik-engine, pkg:maven/net.jqwik/jqwik-time,
             pkg:maven/net.jqwik/jqwik-web, pkg:pypi/regex, pkg:maven/com.uber.nullaway/nullaway,
             pkg:maven/org.checkerframework/checker-qual, pkg:maven/org.checkerframework/dataflow-nullaway,
-            pkg:maven/org.tukaani/xz
+            pkg:maven/org.tukaani/xz, pkg:maven/org.nineml/coffeefilter, pkg:maven/org.nineml/coffeegrinder,
+            pkg:maven/org.nineml/coffeepot, pkg:maven/org.nineml/coffeesacks, pkg:maven/org.relaxng/jing
