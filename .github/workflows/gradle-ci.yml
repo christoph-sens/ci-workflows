@@ -189,4 +189,8 @@ jobs:
             pkg:maven/net.jqwik/jqwik-web, pkg:pypi/regex, pkg:maven/com.uber.nullaway/nullaway,
             pkg:maven/org.checkerframework/checker-qual, pkg:maven/org.checkerframework/dataflow-nullaway,
             pkg:maven/org.tukaani/xz, pkg:maven/org.nineml/coffeefilter, pkg:maven/org.nineml/coffeegrinder,
-            pkg:maven/org.nineml/coffeepot, pkg:maven/org.nineml/coffeesacks, pkg:maven/org.relaxng/jing
+            pkg:maven/org.nineml/coffeepot, pkg:maven/org.nineml/coffeesacks, pkg:maven/org.relaxng/jing,
+            pkg:maven/org.eclipse.sisu/org.eclipse.sisu.inject, pkg:maven/org.eclipse.sisu/org.eclipse.sisu.plexus,
+            pkg:maven/io.rsocket/rsocket-bom, pkg:maven/org.antlr/antlr-master, pkg:maven/org.antlr/antlr4-master,
+            pkg:maven/org.jboss/jboss-parent, pkg:maven/org.glassfish.jersey/jersey-bom,
+            pkg:maven/org.flywaydb/flyway-database-postgresql
