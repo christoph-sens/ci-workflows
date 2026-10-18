@@ -2,8 +2,15 @@ name: Dependabot auto-merge
 
 # Reusable: enables auto-merge (squash) for Dependabot minor/patch PRs. Call it from a pull_request
 # workflow with contents: write and pull-requests: write.
+# A merge done with GITHUB_TOKEN starts no workflows, so main gets no CI run and no dependency graph
+# snapshot, and the next PR fails dependency review. Pass merge-token (stored as a Dependabot secret,
+# because runs started by Dependabot only see those) to merge as a user whose push starts CI.
 on:
   workflow_call:
+    secrets:
+      merge-token:
+        description: Token that enables auto-merge, so that the merge starts the push workflows (contents and pull requests read/write)
+        required: false
 
 permissions: {}
 
@@ -22,7 +29,12 @@ jobs:
       - if: >-
           steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
           steps.metadata.outputs.update-type == 'version-update:semver-patch'
-        run: gh pr merge --auto --squash "$PR_URL"
+        run: |
+          if [ -z "$MERGE_TOKEN" ]; then
+            echo "::warning::No merge-token: the merge will start no CI run on the default branch."
+          fi
+          GH_TOKEN="${MERGE_TOKEN:-$GITHUB_TOKEN}" gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ github.token }}
+          MERGE_TOKEN: ${{ secrets.merge-token }}
+          GITHUB_TOKEN: ${{ github.token }}
