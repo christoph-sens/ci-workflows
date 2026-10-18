@@ -9,3 +9,5 @@ permissions:
 jobs:
   auto-merge:
     uses: ./.github/workflows/dependabot-auto-merge.yml
+    secrets:
+      merge-token: ${{ secrets.AUTO_MERGE_TOKEN }}

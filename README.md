@@ -71,8 +71,18 @@ permissions:
 
 jobs:
   auto-merge:
-    uses: christoph-sens/ci-workflows/.github/workflows/dependabot-auto-merge.yml@<commit-sha> # v1.0.0
+    uses: christoph-sens/ci-workflows/.github/workflows/dependabot-auto-merge.yml@<commit-sha> # v1.4.0
+    secrets:
+      merge-token: ${{ secrets.AUTO_MERGE_TOKEN }}
 ```
+
+A merge done with `GITHUB_TOKEN` starts no workflows: the default branch gets no CI run, so no
+dependency graph snapshot either, and the next pull request fails `dependency-review` because every
+dependency looks new. `merge-token` avoids that: a fine-grained personal access token with the
+repository permissions **Contents: Read and write** and **Pull requests: Read and write**, stored as
+**Dependabot** secret `AUTO_MERGE_TOKEN` (runs started by Dependabot cannot read Actions secrets).
+Without it the job still works and logs a warning. Add `workflow_dispatch:` to the `on:` of `ci.yml`
+to start CI on the default branch by hand when a snapshot is missing.
 
 `.github/workflows/release.yml` of an app with a Dockerfile `prebuilt` target:
 
