@@ -1,0 +1,134 @@
+name: Flutter CI
+
+# Reusable CI for the Flutter apps (e.g. treetrail/pas-de-deux): formatting, localizations, analysis
+# and tests, a release app bundle for Android, an unsigned iOS build on a macOS runner, CodeQL for the
+# workflows and dependency review on pull requests. GitHub reads pubspec.lock natively, so no
+# dependency submission is needed. CodeQL does not support Dart.
+on:
+  workflow_call:
+    inputs:
+      flutter-version:
+        description: Exact Flutter version of the stable channel, e.g. 3.47.8. It only moves on purpose.
+        type: string
+        required: true
+      java-version:
+        description: Temurin JDK version for the Android build.
+        type: string
+        default: "25"
+      ios:
+        description: Build for iOS on a macOS runner.
+        type: boolean
+        default: true
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: ${{ inputs.flutter-version }}
+          cache: true
+          pub-cache: true
+      - name: Get dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed .
+      - name: Check localizations
+        # Fails on untranslated messages and on generated code that is not up to date.
+        if: hashFiles('l10n.yaml') != ''
+        run: |
+          flutter gen-l10n 2>&1 | tee "$RUNNER_TEMP/gen-l10n.log"
+          if grep -qi untranslated "$RUNNER_TEMP/gen-l10n.log"; then
+            echo "::error::gen-l10n reports untranslated messages."
+            exit 1
+          fi
+          git diff --exit-code
+      - name: Analyze
+        run: flutter analyze
+      - name: Test
+        run: flutter test
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java-version }}
+          cache: gradle
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: ${{ inputs.flutter-version }}
+          cache: true
+          pub-cache: true
+      - name: Build app bundle
+        run: flutter build appbundle
+
+  ios:
+    if: inputs.ios
+    runs-on: macos-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          flutter-version: ${{ inputs.flutter-version }}
+          cache: true
+          pub-cache: true
+      - name: Build without code signing
+        run: flutter build ios --no-codesign
+
+  # Scans the workflow files themselves (e.g. script injection via ${{ }} in run:, overly broad permissions).
+  codeql-actions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: github/codeql-action/init@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          languages: actions
+          build-mode: none
+          queries: security-extended
+      - uses: github/codeql-action/analyze@6f2ac81f5cd81fe351a197ba0b00d91d03cd2aee # v4.39.0
+        with:
+          category: /language:actions
+
+  # Blocks pull requests that add or update dependencies with known high/critical vulnerabilities or
+  # licenses outside the allow-list. Same policy as gradle-ci.yml.
+  dependency-review:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          fail-on-severity: high
+          allow-licenses: >-
+            0BSD, Apache-1.1, Apache-2.0, BSD-2-Clause, BSD-3-Clause, BSL-1.0, CC0-1.0, CDDL-1.0,
+            CDDL-1.1, EPL-1.0, EPL-2.0, ISC, LGPL-2.1, LGPL-2.1-only, LGPL-2.1-or-later,
+            LGPL-3.0-only, LGPL-3.0-or-later, MIT, MIT-0, MPL-2.0, Unicode-3.0, Unicode-DFS-2016,
+            Zlib, GPL-2.0-only WITH Classpath-exception-2.0
