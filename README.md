@@ -8,7 +8,7 @@ Reusable GitHub Actions workflows shared by the repositories of
 | --- | --- |
 | [`gradle-ci.yml`](.github/workflows/gradle-ci.yml) | Build + tests, optional integration tests, optional Docker image with Trivy scan, CodeQL (Kotlin/Java and workflows), Gradle dependency submission, dependency review on pull requests |
 | [`node-ci.yml`](.github/workflows/node-ci.yml) | `npm ci` + npm scripts (default `check build`), CodeQL (JavaScript/TypeScript and workflows), dependency review on pull requests |
-| [`flutter-ci.yml`](.github/workflows/flutter-ci.yml) | Formatting, localizations, `flutter analyze` + tests, Android app bundle, unsigned iOS build, CodeQL (workflows), dependency review on pull requests |
+| [`flutter-ci.yml`](.github/workflows/flutter-ci.yml) | Formatting, localizations, `flutter analyze` + tests, Android app bundle, unsigned iOS build, CodeQL (workflows), vulnerability review of dependencies on pull requests |
 | [`dependabot-auto-merge.yml`](.github/workflows/dependabot-auto-merge.yml) | Auto-merge (squash) for Dependabot minor/patch PRs once CI is green |
 | [`security-alert-issues.yml`](.github/workflows/security-alert-issues.yml) | One issue per vulnerable package, kept in sync with the open Dependabot alerts |
 | [`container-release.yml`](.github/workflows/container-release.yml) | Release of a Spring Boot app as container image: on tag `vX.Y.Z` build + test, Trivy gate, push to GHCR, provenance + SBOM attestations, GitHub release |
@@ -188,7 +188,11 @@ The `build` job checks `dart format`, runs `flutter gen-l10n` if the repository 
 (it fails on untranslated messages and on generated code that is not committed), then
 `flutter analyze` and `flutter test`. The `android` job builds a release app bundle with the
 signing configuration of the project. Like for npm, GitHub reads `pubspec.lock` natively; CodeQL
-covers only the workflows, because it does not support Dart. The jobs report as `ci / build`,
+covers only the workflows, because it does not support Dart.
+
+The dependency review checks pub packages for vulnerabilities only, not for licenses: GitHub reports
+their licenses in lower case (`bsd-3-clause`, `mit`), which the action rejects as invalid SPDX, or
+not at all. Review the license of a new direct dependency by hand when adding it. The jobs report as `ci / build`,
 `ci / android`, `ci / ios`, `ci / codeql-actions` and `ci / dependency-review`.
 
 ### Status checks
