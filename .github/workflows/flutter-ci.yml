@@ -2,8 +2,8 @@ name: Flutter CI
 
 # Reusable CI for the Flutter apps (e.g. treetrail/pas-de-deux): formatting, localizations, analysis
 # and tests, a release app bundle for Android, an unsigned iOS build on a macOS runner, CodeQL for the
-# workflows and dependency review on pull requests. GitHub reads pubspec.lock natively, so no
-# dependency submission is needed. CodeQL does not support Dart.
+# workflows and a vulnerability review of dependencies on pull requests. GitHub reads pubspec.lock
+# natively, so no dependency submission is needed. CodeQL does not support Dart.
 on:
   workflow_call:
     inputs:
@@ -115,8 +115,9 @@ jobs:
         with:
           category: /language:actions
 
-  # Blocks pull requests that add or update dependencies with known high/critical vulnerabilities or
-  # licenses outside the allow-list. Same policy as gradle-ci.yml.
+  # Blocks pull requests that add or update dependencies with known high/critical vulnerabilities.
+  # No license check: GitHub reports pub licenses in lower case (e.g. "bsd-3-clause"), which the
+  # action's SPDX parser rejects as invalid, or not at all, so every pub package would fail it.
   dependency-review:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -127,8 +128,4 @@ jobs:
       - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
         with:
           fail-on-severity: high
-          allow-licenses: >-
-            0BSD, Apache-1.1, Apache-2.0, BSD-2-Clause, BSD-3-Clause, BSL-1.0, CC0-1.0, CDDL-1.0,
-            CDDL-1.1, EPL-1.0, EPL-2.0, ISC, LGPL-2.1, LGPL-2.1-only, LGPL-2.1-or-later,
-            LGPL-3.0-only, LGPL-3.0-or-later, MIT, MIT-0, MPL-2.0, Unicode-3.0, Unicode-DFS-2016,
-            Zlib, GPL-2.0-only WITH Classpath-exception-2.0
+          license-check: false
