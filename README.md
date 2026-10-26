@@ -1,13 +1,14 @@
 # ci-workflows
 
 Reusable GitHub Actions workflows shared by the repositories of
-[christoph-sens](https://github.com/christoph-sens) (Kotlin/Gradle and Node): one place to maintain
-CI instead of copies that drift apart.
+[christoph-sens](https://github.com/christoph-sens) and [treetrail](https://github.com/treetrail)
+(Kotlin/Gradle, Node and Flutter): one place to maintain CI instead of copies that drift apart.
 
 | Workflow | Purpose |
 | --- | --- |
 | [`gradle-ci.yml`](.github/workflows/gradle-ci.yml) | Build + tests, optional integration tests, optional Docker image with Trivy scan, CodeQL (Kotlin/Java and workflows), Gradle dependency submission, dependency review on pull requests |
 | [`node-ci.yml`](.github/workflows/node-ci.yml) | `npm ci` + npm scripts (default `check build`), CodeQL (JavaScript/TypeScript and workflows), dependency review on pull requests |
+| [`flutter-ci.yml`](.github/workflows/flutter-ci.yml) | Formatting, localizations, `flutter analyze` + tests, Android app bundle, unsigned iOS build, CodeQL (workflows), dependency review on pull requests |
 | [`dependabot-auto-merge.yml`](.github/workflows/dependabot-auto-merge.yml) | Auto-merge (squash) for Dependabot minor/patch PRs once CI is green |
 | [`security-alert-issues.yml`](.github/workflows/security-alert-issues.yml) | One issue per vulnerable package, kept in sync with the open Dependabot alerts |
 | [`container-release.yml`](.github/workflows/container-release.yml) | Release of a Spring Boot app as container image: on tag `vX.Y.Z` build + test, Trivy gate, push to GHCR, provenance + SBOM attestations, GitHub release |
@@ -53,6 +54,20 @@ jobs:
     permissions:
       contents: read
       security-events: write # CodeQL results
+```
+
+For a Flutter app use `flutter-ci.yml`; it needs the same permissions as `node-ci.yml` and the
+exact Flutter version:
+
+```yaml
+jobs:
+  ci:
+    uses: christoph-sens/ci-workflows/.github/workflows/flutter-ci.yml@<commit-sha> # v1.5.0
+    permissions:
+      contents: read
+      security-events: write # CodeQL results
+    with:
+      flutter-version: 3.47.8
 ```
 
 Keep the workflow name `CI`: together with the job id `dependency-submission` it identifies the
@@ -160,6 +175,21 @@ jobs:
 GitHub reads `package-lock.json` natively, so dependency review works without a dependency
 submission job. The license allow-list additionally permits OFL-1.1 (web fonts), BlueOak-1.0.0 and
 Python-2.0.
+
+### Inputs of `flutter-ci.yml`
+
+| Input | Default | Description |
+| --- | --- | --- |
+| `flutter-version` | (required) | Exact Flutter version of the stable channel, e.g. `3.47.8` |
+| `java-version` | `25` | Temurin JDK version for the Android build |
+| `ios` | `true` | Build for iOS (`flutter build ios --no-codesign`) on `macos-latest` |
+
+The `build` job checks `dart format`, runs `flutter gen-l10n` if the repository has an `l10n.yaml`
+(it fails on untranslated messages and on generated code that is not committed), then
+`flutter analyze` and `flutter test`. The `android` job builds a release app bundle with the
+signing configuration of the project. Like for npm, GitHub reads `pubspec.lock` natively; CodeQL
+covers only the workflows, because it does not support Dart. The jobs report as `ci / build`,
+`ci / android`, `ci / ios`, `ci / codeql-actions` and `ci / dependency-review`.
 
 ### Status checks
 
