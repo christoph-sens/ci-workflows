@@ -193,4 +193,4 @@ jobs:
             pkg:maven/org.eclipse.sisu/org.eclipse.sisu.inject, pkg:maven/org.eclipse.sisu/org.eclipse.sisu.plexus,
             pkg:maven/io.rsocket/rsocket-bom, pkg:maven/org.antlr/antlr-master, pkg:maven/org.antlr/antlr4-master,
             pkg:maven/org.jboss/jboss-parent, pkg:maven/org.glassfish.jersey/jersey-bom,
-            pkg:maven/org.flywaydb/flyway-database-postgresql
+            pkg:maven/org.flywaydb/flyway-database-postgresql, pkg:maven/org.commonmark/commonmark
